@@ -1,0 +1,6 @@
+requests
+sounddevice
+numpy
+webrtcvad
+SpeechRecognition
+soundfile
