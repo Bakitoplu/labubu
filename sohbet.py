@@ -56,3 +56,73 @@ SENTENCE_PUNCT = ".!?…"  # Cümle sonu karakterleri
 stt_model = None
 sr_rec = sr.Recognizer()
 
+# =====================
+# SES KAYDI
+# =====================
+def record_until_silence(samplerate=RECORD_SAMPLERATE, frame_ms=20, max_wait_seconds=15,
+                         vad_aggr=int(os.getenv("LABUBU_VAD", "2")),
+                         end_silence_ms=2500, prepad_ms=300):
+    """Konuşma bitince kaydı sonlandırır ve PCM(int16) döner. VAD varsa VAD, yoksa enerji eşiği kullanır."""
+    blocksize = int(samplerate * frame_ms / 1000)
+    dtype = 'int16'
+
+    # Enerji eşiği için parametreler
+    energy_thresh = 500  # kaba bir eşik; mikrofonuna göre ayarlanabilir
+    silence_needed = int(end_silence_ms / frame_ms)
+    prepad_frames = int(prepad_ms / frame_ms)
+
+    vad = webrtcvad.Vad(vad_aggr)
+
+    ring = []
+    buffer = bytearray()
+    collecting = False
+    silence_count = 0
+
+    def callback(indata, frames, time, status):
+        nonlocal collecting, silence_count, buffer, ring
+        # ses sürücüsü durumlarını sessize al
+        # if status:
+        #     pass
+        frame = bytes(indata)
+        ring.append(frame)
+        if len(ring) > prepad_frames:
+            ring.pop(0)
+
+        is_speech = vad.is_speech(frame, samplerate)
+
+        if is_speech:
+            if not collecting:
+                # konuşma başladı → ring içeriğini prepend et
+                for f in ring:
+                    buffer.extend(f)
+                collecting = True
+            buffer.extend(frame)
+            silence_count = 0
+        else:
+            if collecting:
+                buffer.extend(frame)
+                silence_count += 1
+
+    stream = sd.RawInputStream(samplerate=samplerate, channels=1, dtype=dtype,
+                               blocksize=blocksize, callback=callback)
+
+    with stream:
+        total_ms = 0
+        while True:
+            sd.sleep(frame_ms)
+            total_ms += frame_ms
+            if collecting and silence_count >= silence_needed:
+                break
+            if total_ms >= max_wait_seconds * 1000:
+                # zaman aşımı: varsa buffer'ı döndür
+                break
+
+    return bytes(buffer)
+
+def record_audio(duration=DEFAULT_RECORD_SECONDS, samplerate=RECORD_SAMPLERATE):
+    print("\n🎙️ Konuş ({} sn)…".format(duration))
+    recording = sd.rec(int(duration * samplerate), samplerate=samplerate, channels=1, dtype='float32')
+    sd.wait()
+    print("✅ Kayıt bitti.")
+    return np.squeeze(recording)
+
