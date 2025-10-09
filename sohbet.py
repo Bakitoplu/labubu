@@ -126,3 +126,49 @@ def record_audio(duration=DEFAULT_RECORD_SECONDS, samplerate=RECORD_SAMPLERATE):
     print("✅ Kayıt bitti.")
     return np.squeeze(recording)
 
+# =====================
+# STT
+# =====================
+def speech_to_text(audio_data, samplerate=RECORD_SAMPLERATE):
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmpfile:
+        import soundfile as sf
+        sf.write(tmpfile.name, audio_data, samplerate)
+        try:
+            with sr.AudioFile(tmpfile.name) as source:
+                audio = sr_rec.record(source)
+            try:
+                text = sr_rec.recognize_google(audio, language="tr-TR")
+            except (sr.UnknownValueError, sr.RequestError):
+                text = ""
+            return text
+        finally:
+            try:
+                os.remove(tmpfile.name)
+            except Exception:
+                pass
+
+def speech_to_text_from_pcm(pcm_bytes: bytes, samplerate=RECORD_SAMPLERATE):
+    """PCM(int16)->WAV->STT"""
+    if not pcm_bytes:
+        return ""
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmpfile:
+        import wave
+        with wave.open(tmpfile, 'wb') as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(samplerate)
+            wf.writeframes(pcm_bytes)
+        path = tmpfile.name
+    try:
+        with sr.AudioFile(path) as source:
+            audio = sr_rec.record(source)
+        try:
+            text = sr_rec.recognize_google(audio, language="tr-TR")
+        except (sr.UnknownValueError, sr.RequestError):
+            text = ""
+        return text
+    finally:
+        try:
+            os.remove(path)
+        except Exception:
+            pass
