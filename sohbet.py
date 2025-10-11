@@ -172,3 +172,59 @@ def speech_to_text_from_pcm(pcm_bytes: bytes, samplerate=RECORD_SAMPLERATE):
             os.remove(path)
         except Exception:
             pass
+
+# =====================
+# OLLAMA – STREAMING CEVAP
+# =====================
+def chat_with_labubu_stream(prompt, system_hint="Kısa ve net cevap ver." ):
+    """
+    Ollama'dan akışlı (token token) cevap döndürür. Her satır/parça yield edilir.
+    """
+    payload = {
+        "model": MODEL_NAME,
+        "prompt": prompt,
+        "stream": True,
+        **({"system": system_prompt} if system_prompt else {})
+    }
+    try:
+        with requests.post(OLLAMA_URL, json=payload, stream=True, timeout=60) as r:
+            r.raise_for_status()
+            for raw in r.iter_lines(decode_unicode=True):
+                if not raw:
+                    continue
+                try:
+                    data = json.loads(raw)
+                except json.JSONDecodeError:
+                    # Bazı Ollama sürümlerinde doğrudan metin gelebilir
+                    yield raw
+                    continue
+                token = data.get("response", "")
+                if token:
+                    yield token
+                if data.get("done"):
+                    break
+    except requests.RequestException as e:
+        if isinstance(e, requests.ConnectionError):
+            print("[Bilgi] Ollama bağlı değil (localhost:11434). Cevap üretilemedi.")
+        else:
+            print("[Bilgi] Ollama isteği başarısız oldu.")
+        return
+
+def chat_with_labubu(prompt, system_hint="Kısa ve net cevap ver."):
+    payload = {
+        "model": MODEL_NAME,
+        "prompt": prompt,
+        "stream": False,
+        **({"system": system_prompt} if system_prompt else {})
+    }
+    try:
+        r = requests.post(OLLAMA_URL, json=payload, timeout=120)
+        r.raise_for_status()
+        data = r.json()
+        return data.get("response", "")
+    except requests.RequestException as e:
+        if isinstance(e, requests.ConnectionError):
+            print("[Bilgi] Ollama bağlı değil (localhost:11434).")
+        else:
+            print("[Bilgi] Ollama isteği başarısız oldu.")
+        return ""
