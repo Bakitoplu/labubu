@@ -228,3 +228,51 @@ def chat_with_labubu(prompt, system_hint="Kısa ve net cevap ver."):
         else:
             print("[Bilgi] Ollama isteği başarısız oldu.")
         return ""
+
+# =====================
+# Basit TTS macOS 'say'
+# =====================
+def speak(text: str):
+    """Basit TTS: macOS 'say' kullanır; başarısız olursa sessizce geçer."""
+    try:
+        subprocess.run(["say", text], check=False)
+    except Exception:
+        pass
+
+# =====================
+# ANA DÖNGÜ
+# =====================
+if __name__ == "__main__":
+    print("🎤 Basit mod: Konuş, susunca kayıt bitecek. Cevaptan sonra tekrar dinleyecek. Çıkmak için 'çık' de veya CTRL+C.")
+    print(f"[Mod] {'ONLINE' if ONLINE else 'OFFLINE'}  |  FORCE_OFFLINE={'1' if FORCE_OFFLINE else '0'}")
+    try:
+        while True:
+            # 1) Konuşma bitene kadar kaydet
+            pcm = record_until_silence()
+            if not pcm or len(pcm) < 3200:  # ~100ms altını at
+                continue
+
+            # 2) STT
+            text = speech_to_text_from_pcm(pcm)
+            if not text:
+                print("(Algılanan metin yok)")
+                continue
+            print("\nSen:", text)
+
+            # 3) Çıkış komutu
+            if text.strip().lower() in {"çık", "exit", "quit"}:
+                print("Labubu: Görüşürüz 👋")
+                break
+
+            # 4) LLM
+            reply = chat_with_labubu(text)
+            if not reply:
+                print("Labubu: (cevap alınamadı)")
+                continue
+            print("Labubu:", reply)
+
+            # 5) TTS
+            speak(reply)
+
+    except KeyboardInterrupt:
+        print("\nLabubu: Çıkılıyor…")
